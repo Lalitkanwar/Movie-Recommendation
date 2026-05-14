@@ -5,7 +5,6 @@ import requests
 import os
 import ast
 import urllib.parse
-import kagglehub
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from rapidfuzz import process, fuzz
@@ -300,28 +299,37 @@ def inject_css():
 # --- DATA HANDLING ---
 @st.cache_data(show_spinner=False)
 def load_data():
-    import kagglehub
-    import os
     import pandas as pd
+    import os
 
-    # Download latest version
-    path = kagglehub.dataset_download("tmdb/tmdb-movie-metadata")
-    print("Path to dataset files:", path)
-
-    files = os.listdir(path)
-    print("Files found:", files)
-
-    csv_files = [os.path.join(path, f) for f in files if f.endswith('.csv')]
-
-    movies_path  = [f for f in csv_files if "movies"  in f][0]
-    credits_path = [f for f in csv_files if "credits" in f][0]
-
-    movies  = pd.read_csv(movies_path)
-    credits = pd.read_csv(credits_path)
+    try:
+        # Try reading local files first (if uploaded to GitHub)
+        if os.path.exists("tmdb_5000_movies.csv") and os.path.exists("tmdb_5000_credits.csv"):
+            movies = pd.read_csv("tmdb_5000_movies.csv")
+            credits = pd.read_csv("tmdb_5000_credits.csv")
+        else:
+            # Try kagglehub (works locally)
+            import kagglehub
+            path = kagglehub.dataset_download("tmdb/tmdb-movie-metadata")
+            movies_path = os.path.join(path, "tmdb_5000_movies.csv")
+            credits_path = os.path.join(path, "tmdb_5000_credits.csv")
+            movies = pd.read_csv(movies_path)
+            credits = pd.read_csv(credits_path)
+    except ImportError:
+        # Fallback for Streamlit Cloud if kagglehub is not installed
+        st.warning("Downloading dataset from fallback source... (This may take a moment)")
+        movies_url = "https://raw.githubusercontent.com/YashMarmat/Movie-Recommendation-System/main/tmdb_5000_movies.csv"
+        credits_url = "https://raw.githubusercontent.com/YashMarmat/Movie-Recommendation-System/main/tmdb_5000_credits.csv"
+        try:
+            movies = pd.read_csv(movies_url)
+            credits = pd.read_csv(credits_url)
+        except Exception as e:
+            st.error("Failed to load data. Please upload tmdb_5000_movies.csv to your GitHub repository.")
+            st.stop()
 
     # Merge on title
     credits.rename(columns={"movie_id": "id"}, errors="ignore")
-    movies  = movies.merge(credits, on="title", how="left")
+    movies = movies.merge(credits, on="title", how="left")
 
     return movies, credits
 
